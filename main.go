@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+<<<<<<< HEAD
 
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
 )
