@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-<<<<<<< HEAD
 
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
 )
@@ -28,8 +27,8 @@ func MarshallStream(stmt *sqlite3.Stmt) (Stream, error) {
 	var duration int
 	var uploader string
 	var turl string
-
 	var stream Stream
+
 	err := stmt.Scan(&uid, &sid, &url, &title, &stype, &duration, &uploader, &turl)
 	if err != nil {
 		return stream, err
@@ -38,18 +37,20 @@ func MarshallStream(stmt *sqlite3.Stmt) (Stream, error) {
 	return stream, nil
 }
 
-func GetStreams(conn *sqlite3.Conn) ([]Stream, error) {
+func GetStreams(conn *sqlite3.Conn) (map[int]*Stream, error) {
+	streams := make(map[int]*Stream)
+	// revisit whether i want a map or maybe it should be a slice with the UID as
+	// index
 	stmt, err := conn.Prepare("SELECT * FROM streams")
 	if err != nil {
-		fmt.Println(err)
+		return streams, err
 	}
 	defer stmt.Close()
 
-	var streams []Stream
 	for {
 		row, err := stmt.Step()
 		if err != nil {
-			fmt.Println(err)
+			return streams, err
 		}
 		if !row {
 			break
@@ -57,25 +58,94 @@ func GetStreams(conn *sqlite3.Conn) ([]Stream, error) {
 
 		stream, err := MarshallStream(stmt)
 		if err != nil {
-			fmt.Println(err)
+			return streams, err
 		}
-		streams = append(streams, stream)
+		streams[stream.UID] = &stream
 
 	}
-	fmt.Println(streams)
 	return streams, nil
 }
 
 type Playlist struct {
 	//TABLE `playlists`
-	//`uid` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT, `thumbnail_url` TEXT)
-	//TABLE `playlist_stream_join` (`playlist_id` INTEGER NOT NULL, `stream_id` INTEGER NOT NULL, `join_index` INTEGER NOT NULL, PRIMARY KEY(`playlist_id`, `join_index`), FOREIGN KEY(`playlist_id`) REFERENCES `playlists`(`uid`) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`stream_id`) REFERENCES `streams`(`uid`) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)
+	UID      int    //`uid` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL
+	Name     string //`name` TEXT
+	ThumbUrl string //`thumbnail_url` TEXT
+
+	//TABLE `playlist_stream_join`
+	StreamList []*Stream //`stream_id` INTEGER NOT NULL
+	// possibly want to do this differently
 }
 
 func MarshallPlaylist(stmt *sqlite3.Stmt) (Playlist, error) {
+	var uid int
+	var name string
+	var thurl string
+	var playlist Playlist
+
+	err := stmt.Scan(&uid, &name, &thurl)
+	if err != nil {
+		return playlist, err
+	}
+	playlist = Playlist{uid, name, thurl, []*Stream{}}
+	return playlist, nil
 }
 
-func GetPlaylists(conn *sqlite3.Conn) ([]Playlist, error) {
+func GetPlaylists(conn *sqlite3.Conn, streams map[int]*Stream) (map[int]Playlist, error) {
+	playlists := make(map[int]Playlist)
+	stmt, err := conn.Prepare("SELECT * FROM playlists")
+	if err != nil {
+		return playlists, err
+	}
+	defer stmt.Close()
+
+	for {
+		row, err := stmt.Step()
+		if err != nil {
+			return playlists, err
+		}
+		if !row {
+			break
+		}
+
+		playlist, err := MarshallPlaylist(stmt)
+		if err != nil {
+			return playlists, err
+		}
+
+		st, err := conn.Prepare(fmt.Sprintf("SELECT * FROM playlist_stream_join WHERE playlist_id = %v", playlist.UID))
+		if err != nil {
+			return playlists, err
+		}
+		for {
+			row, err := st.Step()
+			if err != nil {
+				return playlists, err
+			}
+			if !row {
+				break
+			}
+
+			var pid int
+			var sid int
+			var idx int
+			err = st.Scan(&pid, &sid, &idx)
+			if err != nil {
+				return playlists, err
+			}
+			if len(playlist.StreamList) == idx {
+				playlist.StreamList = append(playlist.StreamList, streams[sid])
+			} else {
+				fmt.Println("!!!!!! SHIT OUT OF ORDER !!!!!!!!!!!!!!")
+				// I don't really expect to see this because I *think* everything is in
+				// index order in the table, but I'm not sure so it should at least warn
+			}
+		}
+
+		playlists[playlist.UID] = playlist
+
+	}
+	return playlists, nil
 }
 
 func main() {
@@ -86,5 +156,19 @@ func main() {
 	defer conn.Close()
 
 	streams, err := GetStreams(conn)
-	fmt.Println(streams)
+	if err != nil {
+		fmt.Println(err)
+	}
+	playlists, err := GetPlaylists(conn, streams)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	for _, playlist := range playlists {
+		fmt.Printf("Playlist: %s\n", playlist.Name)
+		for i, stream := range playlist.StreamList {
+			fmt.Printf("%v: %s\n", i, stream.Title)
+		}
+	}
+
 }
