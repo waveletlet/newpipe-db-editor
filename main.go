@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
+	"io"
+	"os"
+	"strconv"
 
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
 )
@@ -18,7 +22,7 @@ type Stream struct {
 	ThumbUrl   string //`thumbnail_url` TEXT
 }
 
-func MarshallStream(stmt *sqlite3.Stmt) (Stream, error) {
+func MarshalStream(stmt *sqlite3.Stmt) (Stream, error) {
 	var uid int
 	var sid int
 	var url string
@@ -56,7 +60,7 @@ func GetStreams(conn *sqlite3.Conn) (map[int]*Stream, error) {
 			break
 		}
 
-		stream, err := MarshallStream(stmt)
+		stream, err := MarshalStream(stmt)
 		if err != nil {
 			return streams, err
 		}
@@ -77,7 +81,7 @@ type Playlist struct {
 	// possibly want to do this differently
 }
 
-func MarshallPlaylist(stmt *sqlite3.Stmt) (Playlist, error) {
+func MarshalPlaylist(stmt *sqlite3.Stmt) (Playlist, error) {
 	var uid int
 	var name string
 	var thurl string
@@ -108,7 +112,7 @@ func GetPlaylists(conn *sqlite3.Conn, streams map[int]*Stream) (map[int]Playlist
 			break
 		}
 
-		playlist, err := MarshallPlaylist(stmt)
+		playlist, err := MarshalPlaylist(stmt)
 		if err != nil {
 			return playlists, err
 		}
@@ -148,6 +152,26 @@ func GetPlaylists(conn *sqlite3.Conn, streams map[int]*Stream) (map[int]Playlist
 	return playlists, nil
 }
 
+func DumpPlaylistCSV(playlist Playlist, wri io.Writer) error {
+	w := csv.NewWriter(wri)
+	if err := w.Write([]string{"uid", "service_id", "url", "title", "stream_type", "duration", "uploader", "thumbnail_url"}); err != nil {
+		return err
+	}
+
+	for _, stream := range playlist.StreamList {
+		row := []string{strconv.Itoa(stream.UID), strconv.Itoa(stream.Service_ID), stream.Url, stream.Title, stream.StreamType, strconv.Itoa(stream.Duration), stream.Uploader, stream.ThumbUrl}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	conn, err := sqlite3.Open("/media/dbs/newpipe.db")
 	if err != nil {
@@ -165,10 +189,8 @@ func main() {
 	}
 
 	for _, playlist := range playlists {
-		fmt.Printf("Playlist: %s\n", playlist.Name)
-		for i, stream := range playlist.StreamList {
-			fmt.Printf("%v: %s\n", i, stream.Title)
-		}
+		fmt.Printf("PLAYLIST: %s\n", playlist.Name)
+		DumpPlaylistCSV(playlist, os.Stdout)
 	}
 
 }
