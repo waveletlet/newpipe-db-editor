@@ -6,16 +6,19 @@ I add videos to playlists pretty haphazardly and have some nebulous idea of
 being able to better organize my playlists from a computer than a phone.
 
 ## Design sketch
-- Command line flags for dumping db info
+- Command line flags
+    - dump: all, individual playlist, format....
+    - list: lists playlists
+    - streams: lists all streams
 - Plaintext playlist export
 - Interactive TUI
-  - Sort bookmarked videos/playlists by various criteria
-- Playlist name (default)
-  - Video length
-  - Video name/url
-  - For showing which playlists a given video is in
+  - Sort bookmarked videos/playlists by various criteria:
+    - Playlist name (default)
+    - Video length
+    - Video name/url
+  - Show which playlists a given video is in
   - Generate playlists from sorted output
-  - Example: From an unsorted playlist of workout videos, make a "short workout"
+    - Example: From an unsorted playlist of workout videos, make a "short workout"
   playlist of all videos between 10-15 minutes
 
 
